@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009"
+					   xmlns:s="library://ns.adobe.com/flex/spark"
+					   xmlns:mx="library://ns.adobe.com/flex/mx"
+					   width="600" height="600">
+	<s:layout>
+		<s:VerticalLayout paddingBottom="10" paddingLeft="10" paddingRight="10" paddingTop="10"/>
+	</s:layout>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.sdakin.util.LineReader;
+			
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.PropertyChangeEvent;
+			
+			private var _words:Array;
+			private var _dict:Array = [];
+			
+			// _words = ["competency", "success", "complacency", "failure", "learning", "competent"];
+
+			private function onLookupWords(event:Event):void {
+				trace("start: " + new Date().time);
+				txtResults.text = "";
+				btnLookup.enabled = false;
+				_words = txtWords.text.split(" ");
+				if (_words.length == 0) {
+					Alert.show("Please enter two or more words to use for the search", "No Words Entered", Alert.OK, this);
+				} else {
+					if (_dict.length == 0) {
+						lblStatus.text = "reading dictionary...";
+						var delay:Timer = new Timer(100);
+						delay.addEventListener(TimerEvent.TIMER, performReadDict);
+						delay.start();
+						
+						function performReadDict(event:Event):void {
+							delay.stop();
+							var dictFile:File = File.applicationDirectory.resolvePath("wordsEn.txt");
+							var reader:LineReader = new LineReader(dictFile);
+							reader.open();
+							while (reader.moreData()) {
+								_dict.push(reader.readLine());
+							}
+							trace("dictionary read: " + new Date().time);
+							doLookup();
+						}
+					} else
+						doLookup();
+				}
+			}
+			
+			private function doLookup():void {
+				lblStatus.text = "looking up words...";
+				var delay:Timer = new Timer(100);
+				delay.addEventListener(TimerEvent.TIMER, performLookup);
+				delay.start();
+				
+				function performLookup(event:Event):void {
+					delay.stop();
+					var charPos:Array = [0, 0, 0, 0, 0, 0];
+	
+					var foundWords:Object = new Object();
+					findWords("", _words, charPos, foundWords);
+					
+					var resultsStr:String = "";
+					var wordList:Array = new Array();
+					for each (var word:String in foundWords)
+						wordList.push(word);
+					wordList = wordList.sort();
+					for each (word in wordList) {
+						if (resultsStr.length > 0) resultsStr += "\n";
+						resultsStr += word;
+					}
+					lblStatus.text = "";
+					txtResults.text = resultsStr;
+					btnLookup.enabled = true;
+					trace("done: " + new Date().time);
+				}
+			}
+			
+			private function findWords(baseStr:String, words:Array, charPos:Array, foundWords:Object):void {
+				while (charPos[0] < words[0].length) {
+					var checkStr:String = baseStr + String(words[0]).charAt(charPos[0]++);
+					var atEnd:Boolean = (words.length == 1);
+					if (checkWord(checkStr, atEnd)) {
+						if (atEnd) {
+							foundWords[checkStr] = checkStr;
+						} else {
+							findWords(checkStr, words.slice(1), charPos.slice(1), foundWords);
+						}
+					}
+				}
+			}
+			
+			private function checkWord(word:String, atEnd:Boolean):Boolean {
+				return lookupWord(word, 0, _dict.length, atEnd);
+			}
+			
+			private function lookupWord(word:String, start:int, end:int, fullMatch:Boolean):Boolean {
+				if (start > end)
+					return false;	// boundary error condition
+				if (start == end) {
+					return performLookup(start);
+				} else if (end - start < 50) {		// linear search
+					while (start <= end) {
+						if (performLookup(start++))
+							return true;
+					}
+				} else {
+					var mid:int = (start + end) / 2;
+					if (performLookup(mid))
+						return true;
+					var compareResult:int = word.localeCompare(_dict[mid]);
+					if (compareResult < 0)
+						return lookupWord(word, start, mid, fullMatch);
+					else
+						return lookupWord(word, mid, end, fullMatch);
+				}
+				return false;
+				
+				function performLookup(dictIndex:int):Boolean {
+					return fullMatch ? (word == _dict[dictIndex]) : beginsWith(_dict[dictIndex], word);
+				}
+				
+				function beginsWith(lhs:String, rhs:String):Boolean {
+					return lhs.substr(0, rhs.length) == rhs;
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<s:Label text="Enter the set of words you would like to use, separated by spaces"/>
+	<s:TextInput id="txtWords" width="100%"/>
+	<s:Spacer width="10" height="10"/>
+	<s:HGroup width="100%" gap="12" verticalAlign="middle">
+		<s:Button id="btnLookup" label="Lookup Words" click="onLookupWords(event)"/>
+		<s:Label id="lblStatus" fontStyle="italic"/>
+	</s:HGroup>
+	<s:Spacer width="10" height="10"/>
+	<s:Label text="Results"/>
+	<s:TextArea id="txtResults" width="100%" height="100%" editable="false" enabled="true"/>
+</s:WindowedApplication>
